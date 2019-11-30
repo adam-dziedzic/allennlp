@@ -132,7 +132,7 @@ class BasicClassifier(Model):
             loss = self._loss(logits, label.long().view(-1))
             output_dict["loss"] = loss
             self._accuracy(logits, label)
-            self._auc(probs.argmax(-1), label)
+            self._auc(probs[:, 1], label)
 
         return output_dict
 
