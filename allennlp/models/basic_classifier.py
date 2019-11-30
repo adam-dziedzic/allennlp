@@ -9,6 +9,7 @@ from allennlp.modules import Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn.util import get_text_field_mask
 from allennlp.training.metrics import CategoricalAccuracy
+from allennlp.training.metrics import Auc
 
 
 @Model.register("basic_classifier")
@@ -44,6 +45,7 @@ class BasicClassifier(Model):
     regularizer : ``RegularizerApplicator``, optional (default=``None``)
         If provided, will be used to calculate the regularization penalty during training.
     """
+
     def __init__(self,
                  vocab: Vocabulary,
                  text_field_embedder: TextFieldEmbedder,
@@ -76,9 +78,12 @@ class BasicClassifier(Model):
         if num_labels:
             self._num_labels = num_labels
         else:
-            self._num_labels = vocab.get_vocab_size(namespace=self._label_namespace)
-        self._classification_layer = torch.nn.Linear(self._classifier_input_dim, self._num_labels)
+            self._num_labels = vocab.get_vocab_size(
+                namespace=self._label_namespace)
+        self._classification_layer = torch.nn.Linear(self._classifier_input_dim,
+                                                     self._num_labels)
         self._accuracy = CategoricalAccuracy()
+        self._auc = Auc()
         self._loss = torch.nn.CrossEntropyLoss()
         initializer(self)
 
@@ -127,29 +132,34 @@ class BasicClassifier(Model):
             loss = self._loss(logits, label.long().view(-1))
             output_dict["loss"] = loss
             self._accuracy(logits, label)
+            self._auc(probs.argmax(-1), label)
 
         return output_dict
 
     @overrides
-    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[
+        str, torch.Tensor]:
         """
         Does a simple argmax over the probabilities, converts index to string label, and
         add ``"label"`` key to the dictionary with the result.
         """
         predictions = output_dict["probs"]
         if predictions.dim() == 2:
-            predictions_list = [predictions[i] for i in range(predictions.shape[0])]
+            predictions_list = [predictions[i] for i in
+                                range(predictions.shape[0])]
         else:
             predictions_list = [predictions]
         classes = []
         for prediction in predictions_list:
             label_idx = prediction.argmax(dim=-1).item()
-            label_str = (self.vocab.get_index_to_token_vocabulary(self._label_namespace)
-                         .get(label_idx, str(label_idx)))
+            label_str = (
+                self.vocab.get_index_to_token_vocabulary(self._label_namespace)
+                .get(label_idx, str(label_idx)))
             classes.append(label_str)
         output_dict["label"] = classes
         return output_dict
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        metrics = {'accuracy': self._accuracy.get_metric(reset)}
+        metrics = {'accuracy': self._accuracy.get_metric(reset),
+                   'auc': self._auc.get_metric(reset)}
         return metrics
