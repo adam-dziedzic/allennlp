@@ -126,7 +126,7 @@ class BasicClassifier(Model):
         logits = self._classification_layer(embedded_text)
         probs = torch.nn.functional.softmax(logits, dim=-1)
 
-        output_dict = {"logits": logits, "probs": probs}
+        output_dict = {"logits": logits, "probs": probs, "labels": label}
 
         if label is not None:
             loss = self._loss(logits, label.long().view(-1))
